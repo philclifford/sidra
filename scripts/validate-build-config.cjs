@@ -10,45 +10,67 @@ function main() {
   // because electron-builder exposes no public validator. Internal paths under
   // app-builder-lib/out/ can break on dependency updates with module-not-found
   // errors instead of configuration errors.
-  const pkg = JSON.parse(fs.readFileSync(path.join(projectDir, "package.json"), "utf8"));
+  const pkg = JSON.parse(
+    fs.readFileSync(path.join(projectDir, "package.json"), "utf8"),
+  );
   const config = pkg.build ?? {};
-  console.log("  \u2713 electron-builder config: read from package.json \"build\" (no schema check; electron-builder exposes no public validator)");
+  console.log(
+    '  \u2713 electron-builder config: read from package.json "build" (no schema check; electron-builder exposes no public validator)',
+  );
 
   // Reject obsolete options that electron-builder can otherwise ignore.
   // Each error names the supported replacement.
   if (config.npmSkipBuildFromSource === false) {
-    throw new Error("npmSkipBuildFromSource is deprecated; use buildDependenciesFromSource");
+    throw new Error(
+      "npmSkipBuildFromSource is deprecated; use buildDependenciesFromSource",
+    );
   }
   if (config.appImage != null && config.appImage.systemIntegration != null) {
-    throw new Error("appImage.systemIntegration is deprecated; use AppImageLauncher for desktop integration");
+    throw new Error(
+      "appImage.systemIntegration is deprecated; use AppImageLauncher for desktop integration",
+    );
   }
   if (config.extraMetadata != null) {
     if (config.extraMetadata.build != null) {
-      throw new Error("extraMetadata.build is deprecated; specify as -c instead");
+      throw new Error(
+        "extraMetadata.build is deprecated; specify as -c instead",
+      );
     }
     if (config.extraMetadata.directories != null) {
-      throw new Error("extraMetadata.directories is deprecated; specify as -c.directories instead");
+      throw new Error(
+        "extraMetadata.directories is deprecated; specify as -c.directories instead",
+      );
     }
   }
   console.log("  \u2713 no deprecated options detected");
 
   const nsis = config.nsis;
   if (nsis?.oneClick !== false) {
-    throw new Error("build.nsis.oneClick must be false to use the assisted installer");
+    throw new Error(
+      "build.nsis.oneClick must be false to use the assisted installer",
+    );
   }
   if (nsis.allowToChangeInstallationDirectory !== true) {
-    throw new Error("build.nsis.allowToChangeInstallationDirectory must be true");
+    throw new Error(
+      "build.nsis.allowToChangeInstallationDirectory must be true",
+    );
   }
   if (Object.hasOwn(nsis, "perMachine")) {
-    throw new Error("build.nsis.perMachine must remain unset so the installer offers per-user and all-users choices");
+    throw new Error(
+      "build.nsis.perMachine must remain unset so the installer offers per-user and all-users choices",
+    );
   }
   if (Object.hasOwn(nsis, "selectPerMachineByDefault")) {
-    throw new Error("build.nsis.selectPerMachineByDefault must remain unset so per-user remains the default choice");
+    throw new Error(
+      "build.nsis.selectPerMachineByDefault must remain unset so per-user remains the default choice",
+    );
   }
   if (nsis.deleteAppDataOnUninstall !== false) {
     throw new Error("build.nsis.deleteAppDataOnUninstall must remain false");
   }
-  console.log("  \u2713 NSIS installer: assisted, per-user by default, install scope and directory selectable");
+  console.log(
+    "  \u2713 NSIS installer: assisted, per-user by default, install scope and directory selectable",
+  );
 
   // FPM requires the author's email for the deb/rpm maintainer field.
   const author = pkg.author;
@@ -57,14 +79,14 @@ function main() {
     if (!emailRegex.test(author)) {
       throw new Error(
         "package.json 'author' must include an email (e.g. \"Name <email>\").\n" +
-        "Required for Linux .deb/.rpm maintainer field."
+          "Required for Linux .deb/.rpm maintainer field.",
       );
     }
   } else if (typeof author === "object" && author !== null) {
     if (!author.email) {
       throw new Error(
         "package.json 'author.email' must be set.\n" +
-        "Required for Linux .deb/.rpm maintainer field."
+          "Required for Linux .deb/.rpm maintainer field.",
       );
     }
   } else {
@@ -79,7 +101,9 @@ function main() {
   const busName = `org.mpris.MediaPlayer2.${String(pkg.productName ?? pkg.name).toLowerCase()}`;
   const actionMethods = ["PlayPause", "Next", "Previous", "Stop"];
   if (desktop?.entry?.Actions !== "PlayPause;Next;Previous;Stop;") {
-    throw new Error("Linux desktop entry Actions must be PlayPause;Next;Previous;Stop;");
+    throw new Error(
+      "Linux desktop entry Actions must be PlayPause;Next;Previous;Stop;",
+    );
   }
   for (const method of actionMethods) {
     const action = desktop.desktopActions?.[method];
@@ -87,7 +111,9 @@ function main() {
       throw new Error(`Linux desktop action ${method} is missing`);
     }
     if (typeof action.Name !== "string" || action.Name.trim() === "") {
-      throw new Error(`Linux desktop action ${method}.Name must be a non-empty string`);
+      throw new Error(
+        `Linux desktop action ${method}.Name must be a non-empty string`,
+      );
     }
     // Match tokens so whitespace and option order can vary without accepting
     // a wrong command, destination, object path or member. The member must be
@@ -99,21 +125,29 @@ function main() {
       throw new Error(`Linux desktop action ${method}.Exec must run dbus-send`);
     }
     if (!tokens.includes(`--dest=${busName}`)) {
-      throw new Error(`Linux desktop action ${method}.Exec must target --dest=${busName}`);
+      throw new Error(
+        `Linux desktop action ${method}.Exec must target --dest=${busName}`,
+      );
     }
     const operands = tokens.filter((token) => !token.startsWith("-"));
     if (operands[0] !== "/org/mpris/MediaPlayer2") {
-      throw new Error(`Linux desktop action ${method}.Exec must use the object path /org/mpris/MediaPlayer2`);
+      throw new Error(
+        `Linux desktop action ${method}.Exec must use the object path /org/mpris/MediaPlayer2`,
+      );
     }
     if (operands[1] !== `org.mpris.MediaPlayer2.Player.${method}`) {
-      throw new Error(`Linux desktop action ${method}.Exec must call org.mpris.MediaPlayer2.Player.${method}`);
+      throw new Error(
+        `Linux desktop action ${method}.Exec must call org.mpris.MediaPlayer2.Player.${method}`,
+      );
     }
-    if (tokens[tokens.length - 1] !== `org.mpris.MediaPlayer2.Player.${method}`) {
+    if (
+      tokens[tokens.length - 1] !== `org.mpris.MediaPlayer2.Player.${method}`
+    ) {
       throw new Error(
         `Linux desktop action ${method}.Exec must end with org.mpris.MediaPlayer2.Player.${method}.\n` +
-        "dbus-send stops parsing options at the member, so any later token is read as a\n" +
-        "type:value message argument; a trailing flag or argument makes it exit 1 and the\n" +
-        "call is never sent."
+          "dbus-send stops parsing options at the member, so any later token is read as a\n" +
+          "type:value message argument; a trailing flag or argument makes it exit 1 and the\n" +
+          "call is never sent.",
       );
     }
   }
@@ -123,7 +157,9 @@ function main() {
   // hicolor/<size>x<size>/apps. A size the hicolor theme does not register is
   // never found, so the desktop shows a generic icon (issue #256). A single PNG
   // file here yields exactly one size, which is how 1024x1024 shipped alone.
-  const registeredHicolorSizes = new Set([16, 22, 24, 32, 36, 48, 64, 72, 96, 128, 192, 256, 512]);
+  const registeredHicolorSizes = new Set([
+    16, 22, 24, 32, 36, 48, 64, 72, 96, 128, 192, 256, 512,
+  ]);
   const iconSetting = config.linux?.icon;
   if (typeof iconSetting !== "string" || iconSetting === "") {
     throw new Error("build.linux.icon must name the Linux icon set directory");
@@ -132,28 +168,37 @@ function main() {
   if (!fs.existsSync(iconDir) || !fs.statSync(iconDir).isDirectory()) {
     throw new Error(
       `build.linux.icon must be a directory of sized PNGs, not a single file: ${iconSetting}\n` +
-      "electron-builder emits one icon from a single PNG and installs it under\n" +
-      "hicolor/<size>x<size>/apps, so only that one size reaches the desktop."
+        "electron-builder emits one icon from a single PNG and installs it under\n" +
+        "hicolor/<size>x<size>/apps, so only that one size reaches the desktop.",
     );
   }
-  const iconSizes = fs.readdirSync(iconDir)
+  const iconSizes = fs
+    .readdirSync(iconDir)
     .map((name) => /^(\d+)x\1\.png$/.exec(name))
     .filter((match) => match !== null)
     .map((match) => Number(match[1]));
   if (iconSizes.length === 0) {
-    throw new Error(`build.linux.icon directory holds no <size>x<size>.png files: ${iconSetting}`);
+    throw new Error(
+      `build.linux.icon directory holds no <size>x<size>.png files: ${iconSetting}`,
+    );
   }
-  const unregistered = iconSizes.filter((size) => !registeredHicolorSizes.has(size)).sort((a, b) => a - b);
+  const unregistered = iconSizes
+    .filter((size) => !registeredHicolorSizes.has(size))
+    .sort((a, b) => a - b);
   if (unregistered.length > 0) {
     throw new Error(
       `build.linux.icon holds sizes the hicolor theme does not register: ${unregistered.join(", ")}.\n` +
-      "Icons installed there are never found. Run just generate-assets."
+        "Icons installed there are never found. Run just generate-assets.",
     );
   }
   if (!iconSizes.includes(512)) {
-    throw new Error("build.linux.icon must include 512x512.png, the largest registered hicolor size");
+    throw new Error(
+      "build.linux.icon must include 512x512.png, the largest registered hicolor size",
+    );
   }
-  console.log(`  \u2713 Linux icon set: ${iconSizes.sort((a, b) => a - b).join(", ")} in registered hicolor sizes`);
+  console.log(
+    `  \u2713 Linux icon set: ${iconSizes.sort((a, b) => a - b).join(", ")} in registered hicolor sizes`,
+  );
 
   console.log("\nAll configuration checks passed.");
 }
