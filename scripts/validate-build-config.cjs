@@ -45,10 +45,14 @@ function main() {
   console.log("  \u2713 no deprecated options detected");
 
   if (config.afterPack !== "build/afterPack.cjs") {
-    throw new Error("build.afterPack must use build/afterPack.cjs for macOS VMP signing");
+    throw new Error(
+      "build.afterPack must use build/afterPack.cjs for macOS VMP signing",
+    );
   }
   if (config.afterSign !== "build/afterSign.cjs") {
-    throw new Error("build.afterSign must use build/afterSign.cjs for Windows VMP signing");
+    throw new Error(
+      "build.afterSign must use build/afterSign.cjs for Windows VMP signing",
+    );
   }
   if (config.win?.signAndEditExecutable === false) {
     throw new Error(
