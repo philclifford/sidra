@@ -1,30 +1,34 @@
 // Check that player listeners have named references and removals inside cleanup blocks.
 // Timer cleanup alone leaves listeners attached. A returned teardown closure also needs a caller.
-import fs from 'node:fs';
-import path from 'node:path';
+import fs from "node:fs";
+import path from "node:path";
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { app } from 'electron';
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { app } from "electron";
 
-import { PlaybackState } from '../src/player';
-import type { IntegrationContext } from '../src/player';
-import { FakePlayer } from './mocks/player';
-import { quit } from './mocks/appLifecycle';
-import { setPlatform, restorePlatform } from './mocks/platform';
+import { PlaybackState } from "../src/player";
+import type { IntegrationContext } from "../src/player";
+import { FakePlayer } from "./mocks/player";
+import { quit } from "./mocks/appLifecycle";
+import { setPlatform, restorePlatform } from "./mocks/platform";
 
-const SRC_DIR = path.join(__dirname, '..', 'src');
-const INTEGRATIONS_DIR = path.join(SRC_DIR, 'integrations');
+const SRC_DIR = path.join(__dirname, "..", "src");
+const INTEGRATIONS_DIR = path.join(SRC_DIR, "integrations");
 
 /** Integration entry points and other known modules that register Player listeners. */
 function playerConsumerFiles(): string[] {
   const integrations = fs
     .readdirSync(INTEGRATIONS_DIR, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(INTEGRATIONS_DIR, entry.name, 'index.ts'))
+    .map((entry) => path.join(INTEGRATIONS_DIR, entry.name, "index.ts"))
     .filter((file) => fs.existsSync(file));
 
   // wedgeDetector and tray need the same cleanup checks despite living outside integrations/.
-  return [...integrations, path.join(SRC_DIR, 'wedgeDetector.ts'), path.join(SRC_DIR, 'tray.ts')];
+  return [
+    ...integrations,
+    path.join(SRC_DIR, "wedgeDetector.ts"),
+    path.join(SRC_DIR, "tray.ts"),
+  ];
 }
 
 /**
@@ -42,12 +46,12 @@ function endOfString(source: string, openIndex: number): number {
   const quote = source[openIndex];
   for (let i = openIndex + 1; i < source.length; i += 1) {
     const ch = source[i];
-    if (ch === '\\') {
+    if (ch === "\\") {
       i += 1;
       continue;
     }
     if (ch === quote) return i;
-    if (quote !== '`' && ch === '\n') return -1;
+    if (quote !== "`" && ch === "\n") return -1;
   }
   return -1;
 }
@@ -60,31 +64,31 @@ function endOfString(source: string, openIndex: number): number {
  */
 function stripCommentsAndStrings(source: string): string {
   const KEEPABLE_STRING = /^[\w-]+$/;
-  let out = '';
+  let out = "";
   for (let i = 0; i < source.length; i += 1) {
     const ch = source[i];
     const next = source[i + 1];
-    if (ch === '/' && next === '/') {
-      const eol = source.indexOf('\n', i);
+    if (ch === "/" && next === "/") {
+      const eol = source.indexOf("\n", i);
       if (eol === -1) return out;
       i = eol - 1;
       continue;
     }
-    if (ch === '/' && next === '*') {
-      const end = source.indexOf('*/', i + 2);
+    if (ch === "/" && next === "*") {
+      const end = source.indexOf("*/", i + 2);
       if (end === -1) return `${out} `;
-      out += ' ';
+      out += " ";
       i = end + 1;
       continue;
     }
-    if (ch === "'" || ch === '"' || ch === '`') {
+    if (ch === "'" || ch === '"' || ch === "`") {
       const end = endOfString(source, i);
       if (end === -1) {
         // Drop the rest of an unterminated literal so nothing inside it can match.
         return out + ch + ch;
       }
       const content = source.slice(i + 1, end);
-      out += ch + (KEEPABLE_STRING.test(content) ? content : '') + ch;
+      out += ch + (KEEPABLE_STRING.test(content) ? content : "") + ch;
       i = end;
       continue;
     }
@@ -102,26 +106,26 @@ function balancedBody(source: string, openIndex: number): string | null {
   for (let i = openIndex; i < source.length; i += 1) {
     const ch = source[i];
     const next = source[i + 1];
-    if (ch === '/' && next === '/') {
-      const eol = source.indexOf('\n', i);
+    if (ch === "/" && next === "/") {
+      const eol = source.indexOf("\n", i);
       if (eol === -1) return null;
       i = eol;
       continue;
     }
-    if (ch === '/' && next === '*') {
-      const end = source.indexOf('*/', i + 2);
+    if (ch === "/" && next === "*") {
+      const end = source.indexOf("*/", i + 2);
       if (end === -1) return null;
       i = end + 1;
       continue;
     }
-    if (ch === "'" || ch === '"' || ch === '`') {
+    if (ch === "'" || ch === '"' || ch === "`") {
       const end = endOfString(source, i);
       if (end === -1) return null;
       i = end;
       continue;
     }
-    if (ch === '{') depth += 1;
-    else if (ch === '}') {
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
       depth -= 1;
       if (depth === 0) return source.slice(openIndex + 1, i);
     }
@@ -130,8 +134,11 @@ function balancedBody(source: string, openIndex: number): string | null {
 }
 
 /** Every cleanup block body in a file, plus the count of blocks that would not balance. */
-function cleanupRegions(source: string): { bodies: string[]; unbalanced: number } {
-  const opener = new RegExp(CLEANUP_OPENER.source, 'g');
+function cleanupRegions(source: string): {
+  bodies: string[];
+  unbalanced: number;
+} {
+  const opener = new RegExp(CLEANUP_OPENER.source, "g");
   const bodies: string[] = [];
   let unbalanced = 0;
   let match: RegExpExecArray | null = opener.exec(source);
@@ -162,21 +169,28 @@ function findCleanupFaults(rawSource: string): string[] {
       /player\.(?:on|once|addListener)\(\s*(['"])([\w-]+)\1\s*,\s*([A-Za-z_$][\w$]*)\s*\)/g,
     ),
   ];
-  const total = [...source.matchAll(/player\.(?:on|once|addListener)\(/g)].length;
+  const total = [...source.matchAll(/player\.(?:on|once|addListener)\(/g)]
+    .length;
   if (named.length !== total) {
-    faults.push('registers a player listener with an inline function, which cannot be removed');
+    faults.push(
+      "registers a player listener with an inline function, which cannot be removed",
+    );
   }
 
   const { bodies, unbalanced } = cleanupRegions(source);
   if (unbalanced > 0) {
-    faults.push(`has ${unbalanced} cleanup block(s) whose braces never balance`);
+    faults.push(
+      `has ${unbalanced} cleanup block(s) whose braces never balance`,
+    );
   }
-  const cleanup = bodies.join('\n');
+  const cleanup = bodies.join("\n");
   const removalKeys = (input: string): Set<string> =>
     new Set(
-      [...input.matchAll(
-        /player\.(?:removeListener|off)\(\s*(['"])([\w-]+)\1\s*,\s*([A-Za-z_$][\w$]*)\s*\)/g,
-      )].map(([, , event, handler]) => `${event}:${handler}`),
+      [
+        ...input.matchAll(
+          /player\.(?:removeListener|off)\(\s*(['"])([\w-]+)\1\s*,\s*([A-Za-z_$][\w$]*)\s*\)/g,
+        ),
+      ].map(([, , event, handler]) => `${event}:${handler}`),
     );
   const cleanupRemovals = removalKeys(cleanup);
   const allRemovals = removalKeys(source);
@@ -194,29 +208,31 @@ function findCleanupFaults(rawSource: string): string[] {
   return faults;
 }
 
-describe('player listener cleanup', () => {
+describe("player listener cleanup", () => {
   // Discover integration directories automatically so new modules receive the same structural cleanup check.
   // This check needs no D-Bus, Discord or platform mocks, but does not prove that teardown runs.
-  describe('every registration has a matching removal', () => {
+  describe("every registration has a matching removal", () => {
     for (const file of playerConsumerFiles()) {
-      const relative = path.relative(path.join(__dirname, '..'), file);
+      const relative = path.relative(path.join(__dirname, ".."), file);
 
       it(`${relative} removes every player listener it registers on quit`, () => {
-        const source = fs.readFileSync(file, 'utf-8');
+        const source = fs.readFileSync(file, "utf-8");
         const faults = findCleanupFaults(source);
 
-        expect(faults, `${relative} ${faults.join('; ')}`).toEqual([]);
+        expect(faults, `${relative} ${faults.join("; ")}`).toEqual([]);
       });
     }
   });
 
   // Fixtures for the sweep itself. The first is the point of the region check:
   // a whole-file search for the removal accepts it, and the sweep must not.
-  describe('the sweep itself', () => {
-    const REGISTER = "player.on('playbackStateDidChange', onPlaybackStateDidChange);";
-    const REMOVE = "player.removeListener('playbackStateDidChange', onPlaybackStateDidChange);";
+  describe("the sweep itself", () => {
+    const REGISTER =
+      "player.on('playbackStateDidChange', onPlaybackStateDidChange);";
+    const REMOVE =
+      "player.removeListener('playbackStateDidChange', onPlaybackStateDidChange);";
 
-    it('rejects a removal outside any cleanup block', () => {
+    it("rejects a removal outside any cleanup block", () => {
       const source = `
         export function init(): void {
           ${REGISTER}
@@ -228,11 +244,13 @@ describe('player listener cleanup', () => {
       `;
 
       expect(findCleanupFaults(source)).toEqual([
-        expect.stringContaining('outside any will-quit handler or teardown closure'),
+        expect.stringContaining(
+          "outside any will-quit handler or teardown closure",
+        ),
       ]);
     });
 
-    it('accepts a removal inside the will-quit handler', () => {
+    it("accepts a removal inside the will-quit handler", () => {
       const source = `
         export function init(): void {
           ${REGISTER}
@@ -249,7 +267,7 @@ describe('player listener cleanup', () => {
       expect(findCleanupFaults(source)).toEqual([]);
     });
 
-    it('accepts a removal inside a returned teardown closure', () => {
+    it("accepts a removal inside a returned teardown closure", () => {
       const source = `
         export function initTrayStateManager(): () => void {
           ${REGISTER}
@@ -263,7 +281,7 @@ describe('player listener cleanup', () => {
       expect(findCleanupFaults(source)).toEqual([]);
     });
 
-    it('accepts double-quoted event names', () => {
+    it("accepts double-quoted event names", () => {
       const source = `
         export function initTrayStateManager(): () => void {
           player.on("playbackStateDidChange", onPlaybackStateDidChange);
@@ -277,7 +295,7 @@ describe('player listener cleanup', () => {
       expect(findCleanupFaults(source)).toEqual([]);
     });
 
-    it('rejects a double-quoted removal for a different event', () => {
+    it("rejects a double-quoted removal for a different event", () => {
       const source = `
         export function initTrayStateManager(): () => void {
           player.on("playbackStateDidChange", onPlaybackStateDidChange);
@@ -293,7 +311,7 @@ describe('player listener cleanup', () => {
       ]);
     });
 
-    it('accepts a cleanup block written above the registration, as mpris has it', () => {
+    it("accepts a cleanup block written above the registration, as mpris has it", () => {
       const source = `
         export function init(): void {
           app.on('will-quit', () => {
@@ -308,7 +326,7 @@ describe('player listener cleanup', () => {
       expect(findCleanupFaults(source)).toEqual([]);
     });
 
-    it('rejects an inline listener even when a cleanup block exists', () => {
+    it("rejects an inline listener even when a cleanup block exists", () => {
       const source = `
         export function init(): void {
           player.on('playbackStateDidChange', (state) => {
@@ -322,11 +340,11 @@ describe('player listener cleanup', () => {
       `;
 
       expect(findCleanupFaults(source)).toEqual([
-        expect.stringContaining('inline function, which cannot be removed'),
+        expect.stringContaining("inline function, which cannot be removed"),
       ]);
     });
 
-    it('ignores a removal written in a comment inside the cleanup block', () => {
+    it("ignores a removal written in a comment inside the cleanup block", () => {
       const source = `
         export function init(): void {
           ${REGISTER}
@@ -343,7 +361,7 @@ describe('player listener cleanup', () => {
       ]);
     });
 
-    it('ignores a removal quoted in a string literal inside the cleanup block', () => {
+    it("ignores a removal quoted in a string literal inside the cleanup block", () => {
       const source = `
         export function init(): void {
           ${REGISTER}
@@ -359,7 +377,7 @@ describe('player listener cleanup', () => {
       ]);
     });
 
-    it('ignores a registration that appears only in a comment', () => {
+    it("ignores a registration that appears only in a comment", () => {
       const source = `
         /* Callers must pair ${REGISTER} with a removal on quit. */
         export function init(): void {}
@@ -368,7 +386,7 @@ describe('player listener cleanup', () => {
       expect(findCleanupFaults(source)).toEqual([]);
     });
 
-    it('ignores a registration inside a template literal', () => {
+    it("ignores a registration inside a template literal", () => {
       const source = `
         export function init(): void {
           const doc = \`example: ${REGISTER}\`;
@@ -379,7 +397,7 @@ describe('player listener cleanup', () => {
     });
 
     // addListener aliases on, so matching only player.on misses valid registrations.
-    it('rejects an addListener registration with no removal', () => {
+    it("rejects an addListener registration with no removal", () => {
       const source = `
         export function init(): void {
           player.addListener('playbackStateDidChange', onPlaybackStateDidChange);
@@ -391,7 +409,7 @@ describe('player listener cleanup', () => {
       ]);
     });
 
-    it('rejects a once registration with no removal', () => {
+    it("rejects a once registration with no removal", () => {
       const source = `
         export function init(): void {
           player.once('playbackStateDidChange', onPlaybackStateDidChange);
@@ -403,7 +421,7 @@ describe('player listener cleanup', () => {
       ]);
     });
 
-    it('accepts a once registration removed inside the will-quit handler', () => {
+    it("accepts a once registration removed inside the will-quit handler", () => {
       const source = `
         export function init(): void {
           player.once('playbackStateDidChange', onPlaybackStateDidChange);
@@ -417,7 +435,7 @@ describe('player listener cleanup', () => {
       expect(findCleanupFaults(source)).toEqual([]);
     });
 
-    it('rejects an inline once listener', () => {
+    it("rejects an inline once listener", () => {
       const source = `
         export function init(): void {
           player.once('playbackStateDidChange', (state) => {
@@ -431,11 +449,11 @@ describe('player listener cleanup', () => {
       `;
 
       expect(findCleanupFaults(source)).toEqual([
-        expect.stringContaining('inline function, which cannot be removed'),
+        expect.stringContaining("inline function, which cannot be removed"),
       ]);
     });
 
-    it('rejects an inline addListener listener', () => {
+    it("rejects an inline addListener listener", () => {
       const source = `
         export function init(): void {
           player.addListener('playbackStateDidChange', (state) => {
@@ -449,25 +467,27 @@ describe('player listener cleanup', () => {
       `;
 
       expect(findCleanupFaults(source)).toEqual([
-        expect.stringContaining('inline function, which cannot be removed'),
+        expect.stringContaining("inline function, which cannot be removed"),
       ]);
     });
   });
 
-  it('main.ts invokes the teardown initTrayStateManager returns', () => {
-    const source = fs.readFileSync(path.join(SRC_DIR, 'main.ts'), 'utf-8');
+  it("main.ts invokes the teardown initTrayStateManager returns", () => {
+    const source = fs.readFileSync(path.join(SRC_DIR, "main.ts"), "utf-8");
 
     // A bare call statement discards the closure, leaving the tray pause timer
     // and its three player listeners attached for the life of the process.
     expect(
       /^\s*initTrayStateManager\(/m.test(source),
-      'main.ts calls initTrayStateManager() as a statement, discarding its teardown closure',
+      "main.ts calls initTrayStateManager() as a statement, discarding its teardown closure",
     ).toBe(false);
-    expect(source).toMatch(/app\.on\(\s*'will-quit'\s*,\s*teardownTrayState\s*\)/);
+    expect(source).toMatch(
+      /app\.on\(\s*'will-quit'\s*,\s*teardownTrayState\s*\)/,
+    );
   });
 });
 
-describe('macos-dock cleanup', () => {
+describe("macos-dock cleanup", () => {
   let player: FakePlayer;
   let setMenu: ReturnType<typeof vi.fn>;
 
@@ -475,13 +495,15 @@ describe('macos-dock cleanup', () => {
     vi.useFakeTimers();
     vi.mocked(app.on).mockClear();
 
-    setPlatform('darwin');
+    setPlatform("darwin");
 
     setMenu = vi.fn();
-    (app as unknown as { dock: { setMenu: typeof setMenu } }).dock = { setMenu };
+    (app as unknown as { dock: { setMenu: typeof setMenu } }).dock = {
+      setMenu,
+    };
 
     player = new FakePlayer();
-    const dock = await import('../src/integrations/macos-dock');
+    const dock = await import("../src/integrations/macos-dock");
     dock.init({ player, getMainWindow: () => null } as IntegrationContext);
   });
 
@@ -491,30 +513,30 @@ describe('macos-dock cleanup', () => {
     vi.useRealTimers();
   });
 
-  it('registers listeners on init', () => {
-    expect(player.listenerCount('nowPlayingItemDidChange')).toBe(1);
-    expect(player.listenerCount('playbackStateDidChange')).toBe(1);
-    expect(player.listenerCount('playbackTimeDidChange')).toBe(1);
+  it("registers listeners on init", () => {
+    expect(player.listenerCount("nowPlayingItemDidChange")).toBe(1);
+    expect(player.listenerCount("playbackStateDidChange")).toBe(1);
+    expect(player.listenerCount("playbackTimeDidChange")).toBe(1);
   });
 
-  it('removes every listener on will-quit', () => {
+  it("removes every listener on will-quit", () => {
     quit();
 
     expect(player.eventNames()).toEqual([]);
   });
 
-  it('runs no handler for an event emitted after will-quit', () => {
+  it("runs no handler for an event emitted after will-quit", () => {
     quit();
     const before = setMenu.mock.calls.length;
 
-    player.emitNowPlaying({ name: 'Blue Monday', artistName: 'New Order' });
+    player.emitNowPlaying({ name: "Blue Monday", artistName: "New Order" });
     player.emitPlaybackState(PlaybackState.Playing);
     player.setPositionUs(1_000_000);
 
     expect(setMenu.mock.calls.length).toBe(before);
   });
 
-  it('cannot fire the pause timer after will-quit', () => {
+  it("cannot fire the pause timer after will-quit", () => {
     // Playing then paused arms the 30 second timer, whose expiry rebuilds the
     // dock menu. Quitting has to destroy it or it fires into a torn-down dock.
     player.emitPlaybackState(PlaybackState.Playing);
@@ -528,7 +550,7 @@ describe('macos-dock cleanup', () => {
   });
 });
 
-describe('wedgeDetector cleanup', () => {
+describe("wedgeDetector cleanup", () => {
   let player: FakePlayer;
   let send: ReturnType<typeof vi.fn>;
 
@@ -539,7 +561,7 @@ describe('wedgeDetector cleanup', () => {
 
     player = new FakePlayer();
     send = vi.fn();
-    const wedgeDetector = await import('../src/wedgeDetector');
+    const wedgeDetector = await import("../src/wedgeDetector");
     wedgeDetector.init({
       player,
       getMainWindow: () => ({ webContents: { send } }),
@@ -550,7 +572,7 @@ describe('wedgeDetector cleanup', () => {
     vi.useRealTimers();
   });
 
-  it('removes every listener on will-quit', () => {
+  it("removes every listener on will-quit", () => {
     expect(player.eventNames().length).toBeGreaterThan(0);
 
     quit();
@@ -558,7 +580,7 @@ describe('wedgeDetector cleanup', () => {
     expect(player.eventNames()).toEqual([]);
   });
 
-  it('attempts no skip for playback stalled after will-quit', () => {
+  it("attempts no skip for playback stalled after will-quit", () => {
     quit();
 
     player.emitPlaybackState(PlaybackState.Playing);
@@ -568,17 +590,20 @@ describe('wedgeDetector cleanup', () => {
   });
 });
 
-describe('tray state manager cleanup', () => {
-  it('removes every listener when its teardown runs', async () => {
+describe("tray state manager cleanup", () => {
+  it("removes every listener when its teardown runs", async () => {
     const player = new FakePlayer();
-    const { initTrayStateManager } = await import('../src/tray');
+    const { initTrayStateManager } = await import("../src/tray");
     const tray = {
       setContextMenu: vi.fn(),
       setToolTip: vi.fn(),
       on: vi.fn(),
     };
 
-    const teardown = initTrayStateManager(player, tray as unknown as Electron.Tray);
+    const teardown = initTrayStateManager(
+      player,
+      tray as unknown as Electron.Tray,
+    );
     expect(player.eventNames().length).toBeGreaterThan(0);
 
     teardown();
