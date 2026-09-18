@@ -39,6 +39,7 @@ The `10_15_7` macOS version freeze is intentional - Chrome itself freezes this v
 ## Code quality objectives
 
 **Electron security**
+
 - `contextIsolation: true`, `nodeIntegration: false` on all windows
 - All main-world renderer→main IPC flows through the `SEND_CHANNELS` allowlist in `src/preload.ts`. Blocked channels log a warning. Private isolated-preload channels do not use `AMWrapper`
 - No Node.js APIs exposed to the renderer
@@ -46,6 +47,7 @@ The `10_15_7` macOS version freeze is intentional - Chrome itself freezes this v
 - Keep process-health and command-provenance diagnostics observational. Log only fixed, allow-listed `key=value` fields. Reduce `preloadPath` to its basename. Exclude user-supplied values, full URLs, other paths, media metadata, error messages, stacks, titles, artists, playlist names, usernames, tokens, credentials, request data, and command arguments. Process-health listeners must never reload, retry, close, quit, or take any other recovery action
 
 **TypeScript**
+
 - `strict: true` in `tsconfig.json`; zero `any` annotations, `@ts-ignore`, or `@ts-expect-error` in `src/`
 - IPC payloads typed via `TypedEmitter<PlayerEvents>`; no raw string channel dispatch. Every main→renderer command takes a `ReceiveChannel`: `sendCommand()` in `src/commandBridge.ts`, `MprisPlayer._send()`, and the one literal in `src/wedgeDetector.ts`, which carries `satisfies ReceiveChannel` because it calls `webContents.send()` directly. A misspelled channel fails `tsc` instead of reaching the preload allowlist, which would drop it silently
 - The renderer→main channel registrations in `src/main.ts` are typed the same way. `onSendChannels()` takes a `Record<C, SendListener>`, and `SendChannel` is split into `NavSendChannel` (the `nav:` prefix) and `PlayerSendChannel`, so each table is total over its half: a channel renamed in `src/types/hook.d.ts`, and one added there with no listener, both fail tsc rather than compiling on and never firing
@@ -53,6 +55,7 @@ The `10_15_7` macOS version freeze is intentional - Chrome itself freezes this v
 - Hook-preload contract typed via `src/types/hook.d.ts` - declares `SidraHook`, `AMWrapperBridge`, `SendChannel`, `ReceiveChannel`, `SidraCommandMessage`, and `Window` augmentations; both allowlists in the preload are built from `channelSet<SendChannel>` and `channelSet<ReceiveChannel>`, so tsc enforces channel sync at compile time. The object exposed as `window.AMWrapper` carries `satisfies AMWrapperBridge`, because `contextBridge.exposeInMainWorld()` takes its payload untyped and the declaration is otherwise checked against nothing
 
 **Architecture**
+
 - All integrations follow the `init(ctx: IntegrationContext)` pattern and manage their own lifecycle
 - Platform-specific modules (`electron-updater`, MPRIS) lazy-required only when needed; never at module top level
 - `playbackTimeDidChange` handlers store position only - never trigger a debounced send (see architecture notes)
@@ -61,6 +64,7 @@ The `10_15_7` macOS version freeze is intentional - Chrome itself freezes this v
 - All event listeners and resources cleaned up on `will-quit`, enforced by `test/integrationCleanup.test.ts`. It reads every `src/integrations/*/index.ts` plus `src/wedgeDetector.ts` and `src/tray.ts` off disk and fails when a `player.on()` has no matching `removeListener`, so a new integration directory is covered without touching the test. Register listeners as named references: an inline function cannot be removed and fails the same check
 
 **Controller navigation**
+
 - `controller:action` and `controller:reset` are private preload channels. Keep them out of `AMWrapper`, `SendChannel`, `ReceiveChannel`, both bridge allowlists, `window.postMessage()`, and `assets/musicKitHook.js`
 - The sandboxed preload must compile to one runtime file whose only `require()` is `electron`. Keep controller runtime logic in `src/preload.ts`. Use type-only imports and `satisfies` for the channel literals
 - Map standard Gamepad buttons 12-15 and 0 to native `Up`, `Down`, `Left`, `Right`, and `Enter` key-down/key-up pairs in `src/controllerIPC.ts`. Button 1 uses `goBackIfPossible()`. Do not send key names or arbitrary input from the renderer
@@ -70,12 +74,14 @@ The `10_15_7` macOS version freeze is intentional - Chrome itself freezes this v
 - Controller support covers navigation only. Keep media controls and settings outside this feature. Do not add a dependency, setting, locale string, or runtime asset for it
 
 **Tests**
+
 - Tests cover pure logic and event forwarding; shared mock fixtures live in `test/mocks/` to avoid duplication. `appLifecycle.ts` fires the recorded `will-quit` handlers, `platform.ts` overrides `process.platform` through a captured descriptor, and `notify.ts` stands in for `src/notify` with the D-Bus daemon gate a test can open or close. `test/notify.test.ts` covers the real gate and must not import that fake
 - Type-level assertions (`expectTypeOf`) used to verify event map contracts at compile time
 - `src/config.ts` is exercised directly, never through a hand-written stand-in; `electron-conf/main` is mocked in `test/setup.ts` so the real module loads, and a self-mock makes every assertion read its own defaults back
 - Two TypeScript programs, both run by `just lint`. `tsconfig.json` sets `"include": ["src/**/*.ts"]` and emits the build, so `test/` cannot join it: `rootDir` is `./src` and the tests would be compiled into `dist/`. `tsconfig.test.json` extends it with `noEmit`, `rootDir: "."` and `test/**/*.ts` added to the include, and is the gate that checks the suite. Vitest still transpiles without type-checking, so a type error in `test/` fails `just lint` and never `just test`; run `npx tsc -p tsconfig.test.json --noEmit` to see it. Keep the `expectTypeOf` assertions meaningful: they are only enforced by this second program. The `lint-code` job in `.github/workflows/builder.yml` runs both programs, so CI fails on a test type error too; it once ran the first alone
 
 **Dependencies**
+
 - Minimise runtime dependencies; each must be purpose-driven
 - Do not add dependencies that duplicate Electron or Node.js built-ins
 
